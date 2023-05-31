@@ -31315,6 +31315,9 @@ with pkgs;
 
   hue-cli = callPackage ../tools/networking/hue-cli { };
 
+  hudkit = callPackage ../applications/misc/hudkit { };
+  hudkit-valarnin = callPackage ../applications/misc/hudkit-valarnin { };
+
   inherit (nodePackages) hueadm;
 
   hugin = callPackage ../applications/graphics/hugin {
