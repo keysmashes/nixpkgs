@@ -11,9 +11,11 @@
 , unzip
 , libsecret
 , libnotify
+, zlib
 , e2fsprogs
 , python3
 , vmopts ? null
+, xorg
 }:
 
 { pname
@@ -79,10 +81,15 @@ with stdenv; lib.makeOverridable mkDerivation (rec {
       target_size=$(get_file_size bin/fsnotifier64)
       patchelf --set-interpreter "$interpreter" bin/fsnotifier64
       munge_size_hack bin/fsnotifier64 $target_size
-    else
+    elif [[ -e bin/fsnotifier ]]; then
       target_size=$(get_file_size bin/fsnotifier)
       patchelf --set-interpreter "$interpreter" bin/fsnotifier
       munge_size_hack bin/fsnotifier $target_size
+    fi
+
+    # fleet
+    if [ -e "bin/${productShort}" ]; then
+      patchelf --set-interpreter "$interpreter" bin/${productShort}
     fi
 
     if [ -d "plugins/remote-dev-server" ]; then
@@ -98,27 +105,50 @@ with stdenv; lib.makeOverridable mkDerivation (rec {
     [[ -f $out/$pname/bin/${loName}.png ]] && ln -s $out/$pname/bin/${loName}.png $out/share/pixmaps/${pname}.png
     [[ -f $out/$pname/bin/${loName}.svg ]] && ln -s $out/$pname/bin/${loName}.svg $out/share/pixmaps/${pname}.svg \
       && ln -s $out/$pname/bin/${loName}.svg $out/share/icons/hicolor/scalable/apps/${pname}.svg
-    mv bin/fsnotifier* $out/libexec/${pname}/.
+    test -e bin/fsnotifier64 && mv bin/fsnotifier64 $out/libexec/${pname}/.
+    test -e bin/fsnotifier && mv bin/fsnotifier $out/libexec/${pname}/.
 
     jdk=${jdk.home}
     item=${desktopItem}
 
-    wrapProgram  "$out/$pname/bin/${loName}.sh" \
-      --prefix PATH : "$out/libexec/${pname}:${lib.makeBinPath [ jdk coreutils gnugrep which git python3 ]}" \
-      --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath ([
-        # Some internals want libstdc++.so.6
-        stdenv.cc.cc.lib libsecret e2fsprogs
-        libnotify
-      ] ++ extraLdPath)}" \
-      ${lib.concatStringsSep " " extraWrapperArgs} \
-      --set-default JDK_HOME "$jdk" \
-      --set-default ANDROID_JAVA_HOME "$jdk" \
-      --set-default JAVA_HOME "$jdk" \
-      --set-default JETBRAINSCLIENT_JDK "$jdk" \
-      --set ${hiName}_JDK "$jdk" \
-      --set ${hiName}_VM_OPTIONS ${vmoptsFile}
+    if [ -e "$out/$pname/bin/${loName}.sh" ]; then
+      wrapProgram  "$out/$pname/bin/${loName}.sh" \
+        --prefix PATH : "$out/libexec/${pname}:${lib.makeBinPath [ jdk coreutils gnugrep which git python3 ]}" \
+        --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath ([
+          # Some internals want libstdc++.so.6
+          stdenv.cc.cc.lib libsecret e2fsprogs
+          libnotify
+        ] ++ extraLdPath)}" \
+        ${lib.concatStringsSep " " extraWrapperArgs} \
+        --set-default JDK_HOME "$jdk" \
+        --set-default ANDROID_JAVA_HOME "$jdk" \
+        --set-default JAVA_HOME "$jdk" \
+        --set-default JETBRAINSCLIENT_JDK "$jdk" \
+        --set ${hiName}_JDK "$jdk" \
+        --set ${hiName}_VM_OPTIONS ${vmoptsFile}
+      ln -s "$out/$pname/bin/${loName}.sh" $out/bin/$pname
+    else
+      # fleet ships with a `Fleet` binary
+      wrapProgram  "$out/$pname/bin/${productShort}" \
+        --inherit-argv0 \
+        --prefix PATH : "$out/libexec/${pname}:${lib.makeBinPath [ jdk coreutils gnugrep which git python3 ]}" \
+        --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath ([
+          # Some internals want libstdc++.so.6
+          stdenv.cc.cc.lib libsecret e2fsprogs
+          libnotify zlib xorg.libXext xorg.libX11
+        ] ++ extraLdPath)}" \
+        ${lib.concatStringsSep " " extraWrapperArgs} \
+        --set-default JDK_HOME "$jdk" \
+        --set-default ANDROID_JAVA_HOME "$jdk" \
+        --set-default JAVA_HOME "$jdk" \
+        --set-default JETBRAINSCLIENT_JDK "$jdk" \
+        --set ${hiName}_JDK "$jdk" \
+        --set ${hiName}_VM_OPTIONS ${vmoptsFile}
+      ln -s "$out/$pname/bin/${productShort}" $out/bin/$pname
+      # disgusting hack
+      cp $out/$pname/lib/app/${productShort}.cfg $out/$pname/lib/app/.${productShort}-wrapped.cfg
+    fi
 
-    ln -s "$out/$pname/bin/${loName}.sh" $out/bin/$pname
     echo -e '#!/usr/bin/env bash\n'"$out/$pname/bin/remote-dev-server.sh"' "$@"' > $out/$pname/bin/remote-dev-server-wrapped.sh
     chmod +x $out/$pname/bin/remote-dev-server-wrapped.sh
     ln -s "$out/$pname/bin/remote-dev-server-wrapped.sh" $out/bin/$pname-remote-dev-server

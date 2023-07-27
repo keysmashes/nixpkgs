@@ -112,6 +112,20 @@ let
       };
     });
 
+  buildFleet = { pname, version, src, license, description, wmClass, buildNumber, ... }:
+    (mkJetBrainsProduct {
+      inherit pname version src wmClass jdk buildNumber;
+      product = "Fleet";
+      meta = with lib; {
+        homepage = "https://www.jetbrains.com/fleet/";
+        inherit description license platform;
+        longDescription = ''
+          Fleet is a next-generation polyglot IDE.
+        '';
+        maintainers = with maintainers; [ sersorrel ];
+      };
+    });
+
   buildGateway = { pname, version, src, license, description, wmClass, buildNumber, product, ... }:
     (mkJetBrainsProduct {
       inherit pname version src wmClass jdk buildNumber product;
@@ -352,6 +366,19 @@ in
     };
     wmClass = "jetbrains-dataspell";
     update-channel = products.dataspell.update-channel;
+  };
+
+  fleet = buildFleet rec {
+    pname = "fleet";
+    version = buildNumber;
+    buildNumber = "1.20.134";
+    description = "Next-generation IDE by JetBrains";
+    license = lib.licenses.unfree;
+    src = fetchurl {
+      url = "https://download-cdn.jetbrains.com/fleet/installers/linux_x64/Fleet-${buildNumber}.tar.gz";
+      sha256 = "sha256-TeWSArlZwq6lOWTTVjRVWFi1fWCKVDEh9mnLRGSk35Y=";
+    };
+    wmClass = "jetbrains-fleet";
   };
 
   gateway = buildGateway rec {
